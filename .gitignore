@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+venv/
+VENV/
+.venv/
+env/
+env.bak/
+venv.bak/
+
+# pytest / testing caches
+.pytest_cache/
+coverage.xml
+.coverage
+
+# Virtual environment artifacts
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# Instance / local config
+instance/appointments.json
+instance/*.pyc
+.env
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Static build outputs
+dist/
+build/
+
+# Misc
+*.sqlite3
+*.db
+
+venv
