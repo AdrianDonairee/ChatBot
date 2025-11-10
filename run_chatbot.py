@@ -9,10 +9,25 @@ from chatbot_logic.processor import process_message
 
 
 def input_int(prompt: str) -> int:
+    txt = safe_input(prompt)
+    if txt is None:
+        return -1
     try:
-        return int(input(prompt).strip())
+        return int(txt.strip())
     except Exception:
         return -1
+
+
+def safe_input(prompt: str) -> str | None:
+    """Wrapper around input() that returns None on EOF/interrupt instead of raising.
+
+    This makes the CLI exit gracefully when stdin is closed (e.g. non-interactive runs).
+    """
+    try:
+        return input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        # Signal to caller that input is unavailable/closed
+        return None
 
 
 def cli_mode():
@@ -27,10 +42,15 @@ def cli_mode():
         print("  4) Listar reservas")
         print("  5) Chatear (entrada libre)")
         print("  6) Salir")
-        choice = input("> ").strip()
+        raw = safe_input("> ")
+        if raw is None:
+            print("\nEntrada cerrada. Saliendo.")
+            break
+        choice = raw.strip()
 
         if choice == '1':
-            date = input("Filtrar por fecha (YYYY-MM-DD) o Enter para todos: ").strip()
+            date_raw = safe_input("Filtrar por fecha (YYYY-MM-DD) o Enter para todos: ")
+            date = date_raw.strip() if date_raw else ""
             slots = am.list_available(date if date else None)
             if not slots:
                 print("No hay turnos disponibles para esa fecha." if date else "No hay turnos disponibles.")
@@ -51,8 +71,10 @@ def cli_mode():
                 if slot['customer']:
                     print("Ese turno ya está reservado.")
                     continue
-                name = input("Nombre del cliente: ").strip()
-                service = input("Servicio (ej. corte, tinte) [General]: ").strip() or "General"
+                name_raw = safe_input("Nombre del cliente: ")
+                name = name_raw.strip() if name_raw else ""
+                service_raw = safe_input("Servicio (ej. corte, tinte) [General]: ")
+                service = (service_raw.strip() if service_raw else "") or "General"
                 if am.book(slot_id, name, service):
                     print(f"Turno reservado: {pretty_slot(am.find_slot(slot_id))}")
                 else:
@@ -61,7 +83,8 @@ def cli_mode():
                 print("Error al reservar:", e)
 
         elif choice == '3':
-            sub = input("Cancelar por (1) id o (2) nombre del cliente? ").strip()
+            sub_raw = safe_input("Cancelar por (1) id o (2) nombre del cliente? ")
+            sub = sub_raw.strip() if sub_raw else ""
             if sub == '1':
                 slot_id = input_int("Ingrese id del turno a cancelar: ")
                 if am.cancel_by_slot(slot_id):
@@ -69,7 +92,8 @@ def cli_mode():
                 else:
                     print("No se pudo cancelar el turno (id inválido o no reservado).")
             elif sub == '2':
-                name = input("Nombre del cliente: ").strip()
+                name_raw = safe_input("Nombre del cliente: ")
+                name = name_raw.strip() if name_raw else ""
                 n = am.cancel_by_customer(name)
                 print(f"Turnos cancelados: {n}")
             else:
@@ -84,7 +108,11 @@ def cli_mode():
                     print(pretty_slot(b))
 
         elif choice == '5':
-            msg = input("Escribí tu mensaje: ").strip()
+            msg_raw = safe_input("Escribí tu mensaje: ")
+            if msg_raw is None:
+                print("Entrada cerrada. Volviendo al menú.")
+                continue
+            msg = msg_raw.strip()
             if not msg:
                 print("Mensaje vacío.")
             else:
