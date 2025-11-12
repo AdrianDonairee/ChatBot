@@ -16,62 +16,42 @@ class AppointmentManager:
     }
     """
 
-    def __init__(self, storage_path: Optional[str] = None, max_days: int = 3):
+    def __init__(self, storage_path: Optional[str] = None):
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         default_dir = os.path.join(repo_root, 'instance')
         os.makedirs(default_dir, exist_ok=True)
         self.storage_path = storage_path or os.path.join(default_dir, 'appointments.json')
-        # generar slots para los próximos `max_days` días (por defecto 5 días x 6 horarios = 30 slots)
-        self.max_days = max_days
         self.slots: List[Dict[str, Any]] = []
         self._load_or_init()
 
     def _load_or_init(self):
-        """Carga slots desde JSON y asegura que existan sólo `max_slots` próximos slots.
-
-        Si existe un archivo previo, preserva las reservas cuyo `datetime` cae dentro de la
-        lista regenerada de `max_slots` slots y descarta el resto (se pueden archivar si se desea).
-        """
         if os.path.exists(self.storage_path):
             try:
                 with open(self.storage_path, 'r', encoding='utf-8') as f:
-                    existing = json.load(f)
-                # generar la plantilla de slots para el rango permitido (max_days)
-                desired = self._generate_slots(days=self.max_days)
-                # mapear datetime -> (customer, service) de reservas existentes
-                booked_map = {s['datetime']: (s.get('customer'), s.get('service'))
-                              for s in existing if s.get('customer')}
-                # aplicar reservas existentes a los slots deseados cuando correspondan
-                for s in desired:
-                    if s['datetime'] in booked_map:
-                        cust, serv = booked_map[s['datetime']]
-                        s['customer'] = cust
-                        s['service'] = serv or s['service']
-                self.slots = desired
-                self._save()
+                    self.slots = json.load(f)
             except Exception:
                 # si hay error al leer, regeneramos
-                self.slots = self._generate_slots(days=self.max_days)
+                self.slots = self._generate_slots()
                 self._save()
         else:
-            self.slots = self._generate_slots(days=self.max_days)
+            self.slots = self._generate_slots()
             self._save()
 
     def _save(self):
         with open(self.storage_path, 'w', encoding='utf-8') as f:
             json.dump(self.slots, f, ensure_ascii=False, indent=2)
 
-    def _generate_slots(self, days: int = 5) -> List[Dict[str, Any]]:
-        """Genera turnos para los próximos `days` días en horarios fijos.
-
-        Por defecto se generan 5 días con 6 turnos por día = 30 slots.
-        """
+    def _generate_slots(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Genera turnos para los próximos `days` días en horarios fijos."""
         times = ["10:00", "11:00", "12:00", "14:00", "15:00", "16:00"]
         slots: List[Dict[str, Any]] = []
         next_id = 1
         today = datetime.now().date()
         for d in range(days):
             day = today + timedelta(days=d)
+            # opcional: omitir domingos
+            # if day.weekday() == 6:
+            #     continue
             for t in times:
                 dt_str = f"{day.isoformat()} {t}"
                 slots.append({
@@ -82,8 +62,6 @@ class AppointmentManager:
                 })
                 next_id += 1
         return slots
-
-    # nota: la ventana permitida ahora está determinada por los slots regenerados (self.slots)
 
     def list_available(self, date: Optional[str] = None) -> List[Dict[str, Any]]:
         if date:
