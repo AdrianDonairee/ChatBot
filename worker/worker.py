@@ -1,7 +1,6 @@
-"""Worker que procesa tareas desde una multiprocessing.Queue.
+"""Worker process module (moved to worker.worker).
 
-Ejecuta acciones mutantes sobre AppointmentManager (book/cancel).
-Esta separación demuestra IPC entre el servidor y el worker.
+Procesa las tareas encoladas por el servidor de sockets o cualquier productor.
 """
 import time
 from typing import Any, Dict

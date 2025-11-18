@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template_string
 from chatbot_logic.processor import process_message
-from chatbot_logic.appointments import AppointmentManager, pretty_slot
+from services.reservation_service import ReservationService
 
 chat_blueprint = Blueprint('chat', __name__)
 
@@ -20,8 +20,8 @@ def chat():
 def get_turnos():
         """Devuelve lista de turnos disponibles. Query param opcional: date=YYYY-MM-DD"""
         date = request.args.get('date')
-        am = AppointmentManager()
-        slots = am.list_available(date) if date else am.list_available()
+        svc = ReservationService()
+        slots = svc.list_available(date) if date else svc.list_available()
         return jsonify({'turnos': slots})
 
 
@@ -34,8 +34,8 @@ def reservar():
         service = data.get('service', 'General')
         if not slot_id or not name:
                 return jsonify({'error': 'slot_id y name son requeridos'}), 400
-        am = AppointmentManager()
-        ok = am.book(int(slot_id), name, service)
+        svc = ReservationService()
+        ok = svc.book(int(slot_id), name, service)
         return jsonify({'ok': ok})
 
 
@@ -43,12 +43,12 @@ def reservar():
 def cancelar():
         """Cancelar por id o por nombre. JSON: {"slot_id": int} o {"name": str}"""
         data = request.get_json(force=True, silent=True) or {}
-        am = AppointmentManager()
+        svc = ReservationService()
         if 'slot_id' in data:
-                ok = am.cancel_by_slot(int(data['slot_id']))
+                ok = svc.cancel_by_slot(int(data['slot_id']))
                 return jsonify({'ok': ok})
         if 'name' in data:
-                n = am.cancel_by_customer(data['name'])
+                n = svc.cancel_by_customer(data['name'])
                 return jsonify({'cancelados': n})
         return jsonify({'error': 'proveer slot_id o name'}), 400
 

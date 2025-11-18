@@ -1,21 +1,11 @@
-"""Servidor TCP multihilo para gestionar pedidos de turnos.
+"""Servidor TCP multihilo (módulo reorganizado en socket_srv.server).
 
-Protocolo de texto simple (una línea por comando):
-- LIST [YYYY-MM-DD]   -> lista turnos disponibles (si no se especifica fecha muestra todos)
-- BOOK <slot_id>|<name>|<service>  -> encola una petición de reserva
-- CANCEL_ID <slot_id> -> encola una petición de cancelación por id
-- CANCEL_NAME <name>  -> encola una petición de cancelación por nombre
-- QUIT                -> cierra la conexión
-
-El servidor delega las operaciones que modifican datos a un worker en otro proceso
-usando una `multiprocessing.Queue` (IPC). Las lecturas se realizan en los hilos de
-conexión para mantener la respuesta rápida.
+Se mantiene la misma funcionalidad que el archivo anterior `socket_server.py`.
 """
 import socket
 import threading
 import argparse
 import multiprocessing
-import json
 from typing import Tuple
 
 from services.reservation_service import ReservationService
@@ -29,7 +19,7 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
     # Usar el servicio para lecturas
     svc = ReservationService()
     with conn:
-        conn.sendall(b"Bienvenido al servidor de turnos\n")
+        conn.sendall("Bienvenido al servidor de turnos\n".encode('utf-8'))
         buf = b""
         while True:
             data = conn.recv(1024)
@@ -47,7 +37,7 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
                 date = parts[1] if len(parts) > 1 else None
                 slots = svc.list_available(date)
                 if not slots:
-                    conn.sendall(b"No hay turnos disponibles.\n")
+                    conn.sendall("No hay turnos disponibles.\n".encode('utf-8'))
                 else:
                     for s in slots:
                         conn.sendall((svc.pretty(s) + "\n").encode('utf-8'))
@@ -105,7 +95,7 @@ def start_server(host: str, port: int, task_queue: multiprocessing.Queue, max_da
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Servidor de turnos (multihilo)')
+    parser = argparse.ArgumentParser(description='Servidor de turnos (módulo socket_srv.server)')
     parser.add_argument('--host', default=HOST)
     parser.add_argument('--port', type=int, default=PORT)
     parser.add_argument('--max-days', type=int, default=3, help='Cantidad de días desde hoy para generar slots (por defecto 3)')
@@ -113,7 +103,7 @@ def main():
 
     task_queue = multiprocessing.Queue()
     # Lanzar worker en proceso aparte
-    from task_worker import TaskWorker
+    from worker.worker import TaskWorker
     worker = TaskWorker(task_queue, max_days=args.max_days)
     worker_process = multiprocessing.Process(target=worker.run, daemon=True)
     worker_process.start()

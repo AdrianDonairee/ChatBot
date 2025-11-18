@@ -1,0 +1,20 @@
+services:
+  web:
+    build: .
+    volumes:
+      - ./:/app
+      - ./instance:/app/instance
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["python", "app.py"]
+
+  socket:
+    build: .
+    volumes:
+      - ./:/app
+      - ./instance:/app/instance
+    ports:
+      - "5001:5001"
+    command: ["python", "socket_srv/server.py", "--host", "0.0.0.0", "--port", "5001"]

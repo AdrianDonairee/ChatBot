@@ -56,4 +56,8 @@ build/
 *.sqlite3
 *.db
 
+# Ensure common unwanted folders are ignored
+__pycache__/
+.pytest_cache/
+.vscode/
 venv
