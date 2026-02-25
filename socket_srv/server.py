@@ -97,6 +97,45 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
 
                 elif parts[0].upper() == 'CANCEL_ID':
                     try:
+                        slot_id = int(parts[1])
+                        task_queue.put({'action': 'cancel_id', 'slot_id': slot_id})
+                        conn.sendall("Cancelación encolada por ID.\n".encode('utf-8'))
+                        logger.info(f"{client_id} encoló cancelación por ID: {slot_id}")
+                    except (IndexError, ValueError) as e:
+                        error_msg = f"Formato inválido CANCEL_ID. Use: CANCEL_ID id. Error: {e}\n"
+                        conn.sendall(error_msg.encode('utf-8'))
+                        logger.warning(f"{client_id} envió comando CANCEL_ID inválido: {e}")
+
+                elif parts[0].upper() == 'CANCEL_NAME':
+                    try:
+                        name = cmd[len('CANCEL_NAME'):].strip()
+                        if not name:
+                            raise ValueError("Nombre vacío")
+                        task_queue.put({'action': 'cancel_name', 'name': name})
+                        conn.sendall("Cancelación encolada por nombre.\n".encode('utf-8'))
+                        logger.info(f"{client_id} encoló cancelación por nombre: {name}")
+                    except ValueError as e:
+                        error_msg = f"Formato inválido CANCEL_NAME. Use: CANCEL_NAME nombre. Error: {e}\n"
+                        conn.sendall(error_msg.encode('utf-8'))
+                        logger.warning(f"{client_id} envió comando CANCEL_NAME inválido: {e}")
+
+                elif parts[0].upper() in ('QUIT', 'EXIT'):
+                    conn.sendall("Adiós\n".encode('utf-8'))
+                    logger.info(f"{client_id} finalizó conexión")
+                    break
+
+                else:
+                    conn.sendall("Comando no reconocido.\n".encode('utf-8'))
+                    logger.warning(f"{client_id} envió comando desconocido: {cmd}")
+                    
+            except Exception as e:
+                logger.error(f"Error manejando cliente {client_id}: {e}")
+                break
+    
+    logger.info(f"Cliente desconectado: {client_id}")
+
+
+def start_server(host: str, port: int, task_queue: multiprocessing.Queue, max_days: int = 7):
     """
     Inicia el servidor TCP y escucha conexiones entrantes.
     
@@ -129,26 +168,11 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
         logger.error(f"Error en servidor: {e}")
     finally:
         srv.close()
-        logger.info("Servidor cerrado"      task_queue.put({'action': 'cancel_name', 'name': name})
-                        conn.sendall("Cancelación encolada por nombre.\n".encode('utf-8'))
-                        logger.info(f"{client_id} encoló cancelación por nombre: {name}")
+        logger.info("Servidor cerrado")
 
-                elif parts[0].upper() in ('QUIT', 'EXIT'):
-                    conn.sendall("Adiós\n".encode('utf-8'))
-                    logger.info(f"{client_id} finalizó conexión")
-                    break
 
-                else:
-                    conn.sendall("Comando no reconocido.\n".encode('utf-8'))
-                    logger.warning(f"{client_id} envió comando desconocido: {cmd}")
-                    
-            except Exception as e:
-                logger.error(f"Error manejando cliente {client_id}: {e}")
-                break
-    
-    logger.info(f"Cliente desconectado: {client_id}")
-
-"""Punto de entrada principal del servidor."""
+def main():
+    """Punto de entrada principal del servidor."""
     parser = argparse.ArgumentParser(
         description='Servidor TCP multihilo para gestión de turnos',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -206,26 +230,7 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
         if worker_process.is_alive():
             logger.warning("Worker no respondió, forzando terminación...")
             worker_process.kill()
-        logger.info("✓ Servidor detenido correctamente"ntParser(description='Servidor de turnos (módulo socket_srv.server)')
-    parser.add_argument('--host', default=HOST)
-    parser.add_argument('--port', type=int, default=PORT)
-    parser.add_argument('--max-days', type=int, default=3, help='Cantidad de días desde hoy para generar slots (por defecto 3)')
-    args = parser.parse_args()
-
-    task_queue = multiprocessing.Queue()
-    # Lanzar worker en proceso aparte
-    from worker.worker import TaskWorker
-    worker = TaskWorker(task_queue, max_days=args.max_days)
-    worker_process = multiprocessing.Process(target=worker.run, daemon=True)
-    worker_process.start()
-
-    try:
-        start_server(args.host, args.port, task_queue, max_days=args.max_days)
-    except KeyboardInterrupt:
-        print('Deteniendo servidor...')
-    finally:
-        worker_process.terminate()
-        worker_process.join()
+        logger.info("✓ Servidor detenido correctamente")
 
 
 if __name__ == '__main__':

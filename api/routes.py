@@ -10,6 +10,7 @@ Endpoints:
 """
 from flask import Blueprint, request, jsonify, render_template_string
 import logging
+import re
 from chatbot_logic import process_message, AppointmentManager
 from api import db, Appointment
 
@@ -36,7 +37,24 @@ def chat():
     try:
         data = request.get_json(force=True, silent=True) or {}
         user_message = data.get('message', '')
-       
+        
+        if not user_message:
+            return jsonify({'error': 'El campo message es obligatorio'}), 400
+        
+        logger.info(f"Mensaje recibido: {user_message[:50]}...")
+        response = process_message(user_message)
+        logger.info(f"Respuesta generada: {response[:50]}...")
+        
+        return jsonify({'response': response})
+    
+    except Exception as e:
+        logger.error(f"Error en endpoint /chat: {e}", exc_info=True)
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@chat_blueprint.route('/turnos', methods=['GET'])
+def turnos():
+    """
     Devuelve lista de turnos disponibles.
     
     Query Parameters:
@@ -50,7 +68,6 @@ def chat():
         
         # Validar formato de fecha si se proporciona
         if date:
-            import re
             if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
                 return jsonify({
                     'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
@@ -79,7 +96,13 @@ def chat():
         return jsonify({'turnos': annotated})
         
     except Exception as e:
-       
+        logger.error(f"Error en endpoint /turnos: {e}", exc_info=True)
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@chat_blueprint.route('/reservar', methods=['POST'])
+def reservar():
+    """
     Reserva un turno específico para un cliente.
     
     Request Body (JSON):
@@ -112,7 +135,47 @@ def chat():
         
         if len(name) > 128:
             return jsonify({'error': 'name no puede exceder 128 caracteres'}), 400
-       
+        
+        if service not in ALLOWED_SERVICES:
+            return jsonify({
+                'error': f'Servicio inválido. Debe ser uno de: {", ".join(ALLOWED_SERVICES)}'
+            }), 400
+        
+        # Intentar reservar
+        am = AppointmentManager()
+        ok = am.book(slot_id, name.strip(), service)
+        
+        if not ok:
+            return jsonify({'ok': False, 'error': 'Turno no disponible o no existe'}), 200
+        
+        # Persistir en la base de datos
+        existing = Appointment.query.filter_by(slot_id=slot_id).first()
+        if existing:
+            # Actualizar existente
+            existing.customer = name.strip()
+            existing.service = service
+        else:
+            # Crear nuevo
+            existing = Appointment(
+                slot_id=slot_id,
+                customer=name.strip(),
+                service=service
+            )
+            db.session.add(existing)
+        
+        db.session.commit()
+        logger.info(f"✓ Reserva exitosa: slot={slot_id}, cliente={name}, servicio={service}")
+        return jsonify({'ok': True})
+        
+    except Exception as e:
+        logger.error(f"Error en endpoint /reservar: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@chat_blueprint.route('/cancelar', methods=['POST'])
+def cancelar():
+    """
     Cancela una o más reservas.
     
     Request Body (JSON):
@@ -161,78 +224,7 @@ def chat():
     except Exception as e:
         logger.error(f"Error en endpoint /cancelar: {e}", exc_info=True)
         db.session.rollback()
-        return jsonify({'error': 'Error interno del servidor'}), 5t_id).first()
-        if existing:
-            # Actualizar existente
-            existing.customer = name.strip()
-            existing.service = service
-        else:
-            # Crear nuevo
-            existing = Appointment(
-                slot_id=slot_id,
-                customer=name.strip(),
-                service=service
-            )
-            db.session.add(existing)
-        
-        db.session.commit()
-        logger.info(f"✓ Reserva exitosa: slot={slot_id}, cliente={name}, servicio={service}")
-        return jsonify({'ok': True})
-        
-    except Exception as e:
-        logger.error(f"Error en endpoint /reservar: {e}", exc_info=True)
-        db.session.rollback()
-        return jsonify({'error': 'Error interno del servidor'}), 500)
-    name = data.get('name')
-    service = data.get('service', 'General')
-    if not slot_id or not name:
-        return jsonify({'error': 'slot_id y name son requeridos'}), 400
-
-    try:
-        slot_id = int(slot_id)
-    except Exception:
-        return jsonify({'error': 'slot_id inválido'}), 400
-
-    am = AppointmentManager()
-    ok = am.book(slot_id, name, service)
-
-    if not ok:
-        return jsonify({'ok': False, 'error': 'slot no disponible'}), 200
-
-    # persistir en la DB (si ya existe, actualizar)
-    existing = Appointment.query.filter_by(slot_id=slot_id).first()
-    if existing:
-        existing.customer = name
-        existing.service = service
-    else:
-        existing = Appointment(slot_id=slot_id, customer=name, service=service)
-        db.session.add(existing)
-    db.session.commit()
-    return jsonify({'ok': True})
-
-
-@chat_blueprint.route('/cancelar', methods=['POST'])
-def cancelar():
-    """Cancelar por id o por nombre. JSON: {"slot_id": int} o {"name": str}"""
-    data = request.get_json(force=True, silent=True) or {}
-    am = AppointmentManager()
-    if 'slot_id' in data:
-        try:
-            slot_id = int(data['slot_id'])
-        except Exception:
-            return jsonify({'error': 'slot_id inválido'}), 400
-        ok = am.cancel_by_slot(slot_id)
-        # eliminar de la BD si existía
-        deleted = Appointment.query.filter_by(slot_id=slot_id).delete()
-        db.session.commit()
-        return jsonify({'ok': ok, 'deleted_db_rows': deleted})
-    if 'name' in data:
-        n = am.cancel_by_customer(data['name'])
-        # eliminar de la BD por customer
-        deleted = Appointment.query.filter_by(customer=data['name']).delete()
-        db.session.commit()
-        return jsonify({'cancelados': n, 'deleted_db_rows': deleted})
-    return jsonify({'error': 'proveer slot_id o name'}), 400
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @chat_blueprint.route('/ui', methods=['GET'])

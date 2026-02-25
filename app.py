@@ -52,19 +52,13 @@ def create_app():
     )
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
-    # enable CORS for the frontend (Vite/dev server) if available
+    # Habilitar CORS para el frontend si está disponible
+    if CORS:
+        CORS(app)
     
-    # Configuración desde variables de entorno
-    host = os.getenv('FLASK_HOST', '0.0.0.0')
-    port = int(os.getenv('FLASK_PORT', '5000'))
-    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
-    
-    # Bind to 0.0.0.0 so the app is reachable from Docker/container network
-    app.run(host=host, port=port, debug=debug
-
-    # inicializar DB
+    # Inicializar DB
     db.init_app(app)
-    # asegurar que exista la carpeta instance y crear tablas
+    # Asegurar que exista la carpeta instance y crear tablas
     with app.app_context():
         os.makedirs(app.instance_path, exist_ok=True)
         db.create_all()
@@ -74,5 +68,11 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
+    
+    # Configuración desde variables de entorno
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    port = int(os.getenv('FLASK_PORT', '5000'))
+    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    
     # Bind to 0.0.0.0 so the app is reachable from Docker/container network
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host=host, port=port, debug=debug)

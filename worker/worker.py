@@ -69,28 +69,14 @@ class TaskWorker:
         elif action == 'cancel_id':
             slot_id = task.get('slot_id')
             ok = svc.cancel_by_slot(slot_id)
-if __name__ == '__main__':
-    """Punto de entrada para testing del worker."""
-    import multiprocessing
-    
-    logger.info("Modo de prueba del worker")
-    q = multiprocessing.Queue()
-    w = TaskWorker(q)
-    
-    # Demo: encolar una tarea de prueba
-    logger.info("Encolando tarea de prueba...")
-    q.put({'action': 'book', 'slot_id': 1, 'name': 'Demo', 'service': 'Corte'})
-    
-    # Ejecutar por 3 segundos y detener
-    import threading
-    def stop_after_timeout():
-        time.sleep(3)
-        w.running = False
-        logger.info("Deteniendo worker de prueba...")
-    
-    threading.Thread(target=stop_after_timeout, daemon=True).start()
-    w.run()
-    logger.info("Prueba completada"  name = task.get('name')
+            
+            if ok:
+                logger.info(f"✓ Cancelación exitosa: slot={slot_id}")
+            else:
+                logger.warning(f"✗ Cancelación fallida: slot={slot_id} (no encontrado)")
+                
+        elif action == 'cancel_name':
+            name = task.get('name')
             n = svc.cancel_by_customer(name)
             logger.info(f"✓ Cancelados {n} turnos del cliente: {name}")
             
@@ -125,9 +111,24 @@ if __name__ == '__main__':
 
 
 if __name__ == '__main__':
+    """Punto de entrada para testing del worker."""
     import multiprocessing
+    
+    logger.info("Modo de prueba del worker")
     q = multiprocessing.Queue()
     w = TaskWorker(q)
-    # demo: encolar una tarea
+    
+    # Demo: encolar una tarea de prueba
+    logger.info("Encolando tarea de prueba...")
     q.put({'action': 'book', 'slot_id': 1, 'name': 'Demo', 'service': 'Corte'})
+    
+    # Ejecutar por 3 segundos y detener
+    import threading
+    def stop_after_timeout():
+        time.sleep(3)
+        w.running = False
+        logger.info("Deteniendo worker de prueba...")
+    
+    threading.Thread(target=stop_after_timeout, daemon=True).start()
     w.run()
+    logger.info("Prueba completada")
