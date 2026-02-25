@@ -1,30 +1,66 @@
+"""
+Aplicación principal Flask para ChatBot de turnos.
+
+Este módulo crea y configura la aplicación Flask con:
+- API REST para gestión de turnos
+- Base de datos SQLAlchemy
+- CORS para frontend
+- Configuración via variables de entorno
+"""
 from flask import Flask
-from api.routes import chat_blueprint
+from api import chat_blueprint, db
 try:
-    # optional: flask-cors may not be installed yet
     from flask_cors import CORS
-except Exception:
+except ImportError:
     CORS = None
 
 import os
-from api.db import db  # nuevo
+
+# Cargar variables de entorno desde .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenv no instalado, usar solo variables de entorno del sistema
+    pass
 
 def create_app():
+    """
+    Factory function para crear la aplicación Flask.
+    
+    Returns:
+        Flask: Aplicación configurada y lista para usar
+    """
     app = Flask(__name__, instance_relative_config=True)
-    # Carga configuración opcional
+    
+    # Carga configuración desde variables de entorno o archivo
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-cambiar-en-produccion')
+    app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    
+    # Intenta cargar configuración desde instance/config.py (opcional)
     try:
         app.config.from_pyfile('instance/config.py')
     except FileNotFoundError:
         pass
 
-    # configuración por defecto de la base de datos (puedes sobrescribir en instance/config.py)
+    # Configuración de base de datos
     instance_db_path = os.path.join(app.instance_path, 'appointments.db')
-    app.config.setdefault('SQLALCHEMY_DATABASE_URI', f"sqlite:///{instance_db_path}")
+    default_db_uri = f"sqlite:///{instance_db_path}"
+    app.config.setdefault(
+        'SQLALCHEMY_DATABASE_URI',
+        os.getenv('DATABASE_URL', default_db_uri)
+    )
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
     # enable CORS for the frontend (Vite/dev server) if available
-    if CORS is not None:
-        CORS(app)
+    
+    # Configuración desde variables de entorno
+    host = os.getenv('FLASK_HOST', '0.0.0.0')
+    port = int(os.getenv('FLASK_PORT', '5000'))
+    debug = os.getenv('FLASK_DEBUG', 'True').lower() == 'true'
+    
+    # Bind to 0.0.0.0 so the app is reachable from Docker/container network
+    app.run(host=host, port=port, debug=debug
 
     # inicializar DB
     db.init_app(app)

@@ -1,5 +1,18 @@
+# Core dependencies
 Flask==3.0.0
-pytest==8.0.0
 Flask-Cors==4.0.0
-Flask-SQLAlchemy
-psycopg2-binary
+Flask-SQLAlchemy==3.1.1
+psycopg2-binary==2.9.9
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Testing
+pytest==8.0.0
+pytest-cov==4.1.0
+
+# Database migrations (opcional pero recomendado)
+# Flask-Migrate==4.0.5
+
+# Security (opcional)
+# Werkzeug>=3.0.0
