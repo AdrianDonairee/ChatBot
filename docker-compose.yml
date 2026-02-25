@@ -1,20 +1,28 @@
+version: '3.8'
 services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpass
+      POSTGRES_DB: chatbot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   web:
     build: .
+    command: python app.py
     volumes:
       - ./:/app
-      - ./instance:/app/instance
+    environment:
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://chatuser:chatpass@db:5432/chatbot
+      FLASK_ENV: development
     ports:
       - "5000:5000"
-    environment:
-      - PYTHONUNBUFFERED=1
-    command: ["python", "app.py"]
+    depends_on:
+      - db
+    restart: unless-stopped
 
-  socket:
-    build: .
-    volumes:
-      - ./:/app
-      - ./instance:/app/instance
-    ports:
-      - "5001:5001"
-    command: ["python", "socket_srv/server.py", "--host", "0.0.0.0", "--port", "5001"]
+volumes:
+  pgdata:
