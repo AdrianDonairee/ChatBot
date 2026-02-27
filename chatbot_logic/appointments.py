@@ -1,13 +1,22 @@
-import json
+"""
+Gestor de turnos usando SQLAlchemy.
+
+Refactorizado para usar base de datos en lugar de JSON,
+permitiendo que todas las interfaces compartan los mismos datos.
+"""
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
+from flask import Flask
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, scoped_session
 
 
 class AppointmentManager:
-    """Gestor simple de turnos persistido en JSON.
-
-    Cada turno es un diccionario:
+    """
+    Gestor de turnos persistido en base de datos SQLAlchemy.
+    
+    Cada turno es un diccionario/objeto TimeSlot:
     {
         "id": int,
         "datetime": "YYYY-MM-DD HH:MM",
@@ -16,104 +25,232 @@ class AppointmentManager:
     }
     """
 
-    def __init__(self, storage_path: Optional[str] = None):
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        default_dir = os.path.join(repo_root, 'instance')
-        os.makedirs(default_dir, exist_ok=True)
-        self.storage_path = storage_path or os.path.join(default_dir, 'appointments.json')
-        self.slots: List[Dict[str, Any]] = []
-        self._load_or_init()
+    def __init__(self, db_uri: Optional[str] = None):
+        """
+        Inicializa el gestor de turnos.
+        
+        Args:
+            db_uri: URI de la base de datos. Si es None, usa sqlite por defecto.
+        """
+        # Importar aquí para evitar dependencias circulares
+        from api.models import TimeSlot
+        from api.db import db
+        
+        self.TimeSlot = TimeSlot
+        self.db = db
+        
+        # Si no hay URI, usar SQLite por defecto
+        if db_uri is None:
+            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            instance_dir = os.path.join(repo_root, 'instance')
+            os.makedirs(instance_dir, exist_ok=True)
+            db_path = os.path.join(instance_dir, 'appointments.db')
+            db_uri = f'sqlite:///{db_path}'
+        
+        # Crear engine y sesión
+        self.engine = create_engine(db_uri)
+        self.SessionLocal = scoped_session(sessionmaker(bind=self.engine))
+        
+        # Inicializar DB si es necesario
+        self._init_db()
+        
+        # Generar slots si la DB está vacía
+        self._ensure_slots()
 
-    def _load_or_init(self):
-        if os.path.exists(self.storage_path):
-            try:
-                with open(self.storage_path, 'r', encoding='utf-8') as f:
-                    self.slots = json.load(f)
-            except Exception:
-                # si hay error al leer, regeneramos
-                self.slots = self._generate_slots()
-                self._save()
-        else:
-            self.slots = self._generate_slots()
-            self._save()
+    def _init_db(self):
+        """Crea las tablas si no existen."""
+        from api.db import db
+        
+        # Crear una app Flask temporal para el contexto
+        app = Flask(__name__)
+        app.config['SQLALCHEMY_DATABASE_URI'] = str(self.engine.url)
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        
+        db.init_app(app)
+        
+        with app.app_context():
+            db.create_all()
 
-    def _save(self):
-        with open(self.storage_path, 'w', encoding='utf-8') as f:
-            json.dump(self.slots, f, ensure_ascii=False, indent=2)
+    def _ensure_slots(self):
+        """Genera slots iniciales si la base está vacía."""
+        session = self.SessionLocal()
+        try:
+            count = session.query(self.TimeSlot).count()
+            if count == 0:
+                self._generate_slots_to_db(session)
+                session.commit()
+        finally:
+            session.close()
 
-    def _generate_slots(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Genera turnos para los próximos `days` días en horarios fijos."""
+    def _generate_slots_to_db(self, session, days: int = 7):
+        """Genera slots en la base de datos."""
         times = ["10:00", "11:00", "12:00", "14:00", "15:00", "16:00"]
-        slots: List[Dict[str, Any]] = []
-        next_id = 1
         today = datetime.now().date()
+        
         for d in range(days):
             day = today + timedelta(days=d)
-            # opcional: omitir domingos
-            # if day.weekday() == 6:
-            #     continue
             for t in times:
                 dt_str = f"{day.isoformat()} {t}"
-                slots.append({
-                    "id": next_id,
-                    "datetime": dt_str,
-                    "service": "General",
-                    "customer": None,
-                })
-                next_id += 1
-        return slots
+                slot = self.TimeSlot(
+                    datetime_str=dt_str,
+                    service="General",
+                    customer=None
+                )
+                session.add(slot)
 
     def list_available(self, date: Optional[str] = None) -> List[Dict[str, Any]]:
-        if date:
-            # date en formato YYYY-MM-DD
-            return [s for s in self.slots if s['customer'] is None and s['datetime'].startswith(date)]
-        return [s for s in self.slots if s['customer'] is None]
+        """
+        Lista turnos disponibles.
+        
+        Args:
+            date: Fecha en formato YYYY-MM-DD para filtrar, o None para todos
+            
+        Returns:
+            Lista de diccionarios con información de slots disponibles
+        """
+        session = self.SessionLocal()
+        try:
+            query = session.query(self.TimeSlot).filter(self.TimeSlot.customer.is_(None))
+            
+            if date:
+                query = query.filter(self.TimeSlot.datetime_str.like(f'{date}%'))
+            
+            slots = query.order_by(self.TimeSlot.datetime_str).all()
+            return [slot.to_dict() for slot in slots]
+        finally:
+            session.close()
 
     def list_bookings(self) -> List[Dict[str, Any]]:
-        return [s for s in self.slots if s['customer']]
+        """Lista todos los turnos reservados."""
+        session = self.SessionLocal()
+        try:
+            slots = session.query(self.TimeSlot)\
+                .filter(self.TimeSlot.customer.isnot(None))\
+                .order_by(self.TimeSlot.datetime_str)\
+                .all()
+            return [slot.to_dict() for slot in slots]
+        finally:
+            session.close()
 
     def find_slot(self, slot_id: int) -> Optional[Dict[str, Any]]:
-        for s in self.slots:
-            if s['id'] == slot_id:
-                return s
-        return None
+        """
+        Busca un slot por ID.
+        
+        Args:
+            slot_id: ID del slot a buscar
+            
+        Returns:
+            Diccionario con datos del slot o None si no existe
+        """
+        session = self.SessionLocal()
+        try:
+            slot = session.query(self.TimeSlot).filter_by(id=slot_id).first()
+            return slot.to_dict() if slot else None
+        finally:
+            session.close()
 
     def book(self, slot_id: int, customer_name: str, service: str = "General") -> bool:
-        slot = self.find_slot(slot_id)
-        if not slot:
+        """
+        Reserva un turno.
+        
+        Args:
+            slot_id: ID del slot a reservar
+            customer_name: Nombre del cliente
+            service: Servicio solicitado
+            
+        Returns:
+            True si se reservó exitosamente, False en caso contrario
+        """
+        session = self.SessionLocal()
+        try:
+            slot = session.query(self.TimeSlot).filter_by(id=slot_id).first()
+            
+            if not slot:
+                return False
+            
+            if slot.customer is not None:
+                return False
+            
+            slot.customer = customer_name
+            slot.service = service
+            session.commit()
+            return True
+        except Exception:
+            session.rollback()
             return False
-        if slot['customer'] is not None:
-            return False
-        slot['customer'] = customer_name
-        slot['service'] = service
-        self._save()
-        return True
+        finally:
+            session.close()
 
     def cancel_by_slot(self, slot_id: int) -> bool:
-        slot = self.find_slot(slot_id)
-        if not slot:
+        """
+        Cancela una reserva por ID de slot.
+        
+        Args:
+            slot_id: ID del slot a cancelar
+            
+        Returns:
+            True si se canceló exitosamente, False en caso contrario
+        """
+        session = self.SessionLocal()
+        try:
+            slot = session.query(self.TimeSlot).filter_by(id=slot_id).first()
+            
+            if not slot or slot.customer is None:
+                return False
+            
+            slot.customer = None
+            slot.service = "General"
+            session.commit()
+            return True
+        except Exception:
+            session.rollback()
             return False
-        if slot['customer'] is None:
-            return False
-        slot['customer'] = None
-        slot['service'] = "General"
-        self._save()
-        return True
+        finally:
+            session.close()
 
     def cancel_by_customer(self, customer_name: str) -> int:
-        """Cancela todas las reservas a nombre de customer_name. Devuelve cantidad canceladas."""
-        count = 0
-        for s in self.slots:
-            if s['customer'] and s['customer'].lower() == customer_name.lower():
-                s['customer'] = None
-                s['service'] = "General"
+        """
+        Cancela todas las reservas a nombre de un cliente.
+        
+        Args:
+            customer_name: Nombre del cliente
+            
+        Returns:
+            Cantidad de turnos cancelados
+        """
+        session = self.SessionLocal()
+        try:
+            slots = session.query(self.TimeSlot)\
+                .filter(self.TimeSlot.customer.ilike(f'%{customer_name}%'))\
+                .all()
+            
+            count = 0
+            for slot in slots:
+                slot.customer = None
+                slot.service = "General"
                 count += 1
-        if count:
-            self._save()
-        return count
+            
+            if count > 0:
+                session.commit()
+            
+            return count
+        except Exception:
+            session.rollback()
+            return 0
+        finally:
+            session.close()
 
 
 def pretty_slot(slot: Dict[str, Any]) -> str:
+    """
+    Formatea un slot para mostrar en texto.
+    
+    Args:
+        slot: Diccionario con datos del slot
+        
+    Returns:
+        String formateado
+    """
     status = "Libre" if not slot['customer'] else f"Reservado por {slot['customer']} ({slot['service']})"
     return f"[{slot['id']}] {slot['datetime']} - {status}"
 

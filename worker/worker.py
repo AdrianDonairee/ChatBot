@@ -7,27 +7,13 @@ Procesa tareas encoladas por el servidor de sockets mediante IPC:
 - Maneja errores de forma robusta
 """
 import time
-import logging
-import os
 from typing import Any, Dict
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
+from common import Config, setup_logging
 from services import ReservationService
 
 # Configurar logging
-logging.basicConfig(
-    level=os.getenv('LOG_LEVEL', 'INFO'),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Configuración desde variables de entorno
-WORKER_SLEEP_TIME = float(os.getenv('WORKER_SLEEP_TIME', '0.1'))
+logger = setup_logging(__name__)
 
 
 class TaskWorker:
@@ -101,7 +87,7 @@ class TaskWorker:
                     logger.error(f"Error procesando tarea {task}: {e}", exc_info=True)
                     
                 # Pequeña pausa entre tareas
-                time.sleep(WORKER_SLEEP_TIME)
+                time.sleep(Config.WORKER_SLEEP_TIME)
                 
             except Exception:
                 # Timeout esperando tarea, continuar

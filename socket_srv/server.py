@@ -10,28 +10,13 @@ import socket
 import threading
 import argparse
 import multiprocessing
-import logging
-import os
 from typing import Tuple
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
+from common import Config, setup_logging
 from services import ReservationService
 
 # Configurar logging
-logging.basicConfig(
-    level=os.getenv('LOG_LEVEL', 'INFO'),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Configuración desde variables de entorno
-HOST = os.getenv('SOCKET_HOST', '0.0.0.0')
-PORT = int(os.getenv('SOCKET_PORT', '5001'))
+logger = setup_logging(__name__)
 
 
 def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multiprocessing.Queue, max_days: int = 3):
@@ -119,6 +104,40 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
                         conn.sendall(error_msg.encode('utf-8'))
                         logger.warning(f"{client_id} envió comando CANCEL_NAME inválido: {e}")
 
+                elif parts[0].upper() in ('HELP', '?'):
+                    help_text = """\
+╔════════════════════════════════════════════════════════════╗
+║         SERVIDOR DE TURNOS - COMANDOS DISPONIBLES         ║
+╚════════════════════════════════════════════════════════════╝
+
+📋 LIST [fecha]
+   Lista turnos disponibles.
+   Ejemplo: LIST
+            LIST 2026-03-01
+
+📝 BOOK id|nombre|servicio
+   Reserva un turno.
+   Ejemplo: BOOK 1|Juan Pérez|Corte
+
+❌ CANCEL_ID id
+   Cancela una reserva por ID de slot.
+   Ejemplo: CANCEL_ID 5
+
+❌ CANCEL_NAME nombre
+   Cancela todas las reservas de un cliente.
+   Ejemplo: CANCEL_NAME Juan Pérez
+
+❓ HELP o ?
+   Muestra esta ayuda.
+
+🚪 QUIT o EXIT
+   Cierra la conexión.
+
+════════════════════════════════════════════════════════════════
+"""
+                    conn.sendall(help_text.encode('utf-8'))
+                    logger.info(f"{client_id} solicitó ayuda")
+
                 elif parts[0].upper() in ('QUIT', 'EXIT'):
                     conn.sendall("Adiós\n".encode('utf-8'))
                     logger.info(f"{client_id} finalizó conexión")
@@ -179,19 +198,19 @@ def main():
     )
     parser.add_argument(
         '--host',
-        default=HOST,
+        default=Config.SOCKET_HOST,
         help='Dirección IP para vincular el servidor'
     )
     parser.add_argument(
         '--port',
         type=int,
-        default=PORT,
+        default=Config.SOCKET_PORT,
         help='Puerto para escuchar'
     )
     parser.add_argument(
         '--max-days',
         type=int,
-        default=int(os.getenv('WORKER_MAX_DAYS', '7')),
+        default=7,
         help='Días a futuro para generar slots'
     )
     args = parser.parse_args()

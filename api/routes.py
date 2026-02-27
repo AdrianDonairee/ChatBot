@@ -4,18 +4,25 @@ Rutas del API REST para el ChatBot de turnos.
 Endpoints:
     POST /chat/           - Chatbot de procesamiento de lenguaje
     GET  /chat/turnos     - Listar turnos disponibles
-    POST /chat/reservar   - Reservar un turno
-    POST /chat/cancelar   - Cancelar una reserva
+    POST /chat/reservar   - Reservar un turno (requiere autenticación)
+    POST /chat/cancelar   - Cancelar una reserva (requiere autenticación)
     GET  /chat/ui         - Interfaz web HTML
 """
 from flask import Blueprint, request, jsonify, render_template_string
-import logging
 import re
+import sys
+import os
+
+# Asegurar que el directorio backend esté en el path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from chatbot_logic import process_message, AppointmentManager
 from api import db, Appointment
+from api.auth import require_token
+from common import setup_logging
 
 # Configurar logger
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 # Blueprint principal
 chat_blueprint = Blueprint('chat', __name__)
@@ -101,9 +108,12 @@ def turnos():
 
 
 @chat_blueprint.route('/reservar', methods=['POST'])
+@require_token
 def reservar():
     """
     Reserva un turno específico para un cliente.
+    
+    Requiere autenticación via header X-API-Token.
     
     Request Body (JSON):
         slot_id (int): ID del turno a reservar
@@ -174,9 +184,12 @@ def reservar():
 
 
 @chat_blueprint.route('/cancelar', methods=['POST'])
+@require_token
 def cancelar():
     """
     Cancela una o más reservas.
+    
+    Requiere autenticación via header X-API-Token.
     
     Request Body (JSON):
         Opción 1: {"slot_id": int} - Cancela por ID
