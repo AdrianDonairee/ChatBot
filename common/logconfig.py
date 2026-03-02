@@ -16,7 +16,7 @@ def setup_logging(name: str, level: str = None) -> logging.Logger:
     Args:
         name: Nombre del logger (usualmente __name__)
         level: Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-               Si es None, usa el valor de Config.LOG_LEVEL
+            Si es None, usa el valor de Config.LOG_LEVEL
     
     Returns:
         Logger configurado
