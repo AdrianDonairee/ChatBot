@@ -582,18 +582,9 @@ Los logs se configuran via `LOG_LEVEL` en `.env`:
 4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
 5. Crear Pull Request
 
-## 📄 Licencia
-
-[Tu licencia aquí]
-
 ## 👥 Autores
 
-[Tus datos aquí]
-
-## 🐛 Reportar Issues
-
-[Link a issues de GitHub]
-
----
+Adrian donaire
+Gaston bravo
 
 **¿Necesitas ayuda?** Revisa la documentación en `/docs` o abre un issue.
