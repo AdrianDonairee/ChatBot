@@ -21,6 +21,19 @@ Uso:
     start_server('0.0.0.0', 5001, task_queue)
 """
 
-from .server import start_server, handle_client, HOST, PORT
+from common import Config
+
+HOST = Config.SOCKET_HOST
+PORT = Config.SOCKET_PORT
+
+
+def start_server(*args, **kwargs):
+    from .server import start_server as _start_server
+    return _start_server(*args, **kwargs)
+
+
+def handle_client(*args, **kwargs):
+    from .server import handle_client as _handle_client
+    return _handle_client(*args, **kwargs)
 
 __all__ = ['start_server', 'handle_client', 'HOST', 'PORT']
