@@ -168,23 +168,24 @@ def start_server(host: str, port: int, task_queue: multiprocessing.Queue, max_da
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen()
+    srv.settimeout(0.5)  # Timeout de 0.5s para responder rápido
     logger.info(f"✓ Servidor TCP escuchando en {host}:{port}")
     
     try:
         while True:
-            conn, addr = srv.accept()
-            # Lanzar un hilo por cada cliente
-            t = threading.Thread(
-                target=handle_client,
-                args=(conn, addr, task_queue, max_days),
-                daemon=True,
-                name=f"Client-{addr[0]}:{addr[1]}"
-            )
-            t.start()
-    except KeyboardInterrupt:
-        logger.info("Interrupción recibida, cerrando servidor...")
-    except Exception as e:
-        logger.error(f"Error en servidor: {e}")
+            try:
+                conn, addr = srv.accept()
+                # Lanzar un hilo por cada cliente
+                t = threading.Thread(
+                    target=handle_client,
+                    args=(conn, addr, task_queue, max_days),
+                    daemon=True,
+                    name=f"Client-{addr[0]}:{addr[1]}"
+                )
+                t.start()
+            except socket.timeout:
+                # Timeout normal, continuar
+                continue
     finally:
         srv.close()
         logger.info("Servidor cerrado")
@@ -241,8 +242,11 @@ def main():
     try:
         start_server(args.host, args.port, task_queue, max_days=args.max_days)
     except KeyboardInterrupt:
-        logger.info("\n⚠️  Interrupción recibida (Ctrl+C)")
+        logger.info("\n⚠️  Interrupción recibida")
+    except Exception as e:
+        logger.error(f"Error fatal: {e}", exc_info=True)
     finally:
+        logger.info("Limpiando recursos...")
         logger.info("Deteniendo worker...")
         worker_process.terminate()
         worker_process.join(timeout=5)

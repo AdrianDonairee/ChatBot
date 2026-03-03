@@ -75,25 +75,28 @@ class TaskWorker:
         logger.info("WORKER INICIADO - Esperando tareas...")
         logger.info("=" * 50)
         
-        while self.running:
-            try:
-                # Esperar tarea con timeout
-                task = self.task_queue.get(timeout=1)
-                logger.debug(f"Tarea recibida: {task}")
-                
+        try:
+            while self.running:
                 try:
-                    self._process(task)
-                except Exception as e:
-                    logger.error(f"Error procesando tarea {task}: {e}", exc_info=True)
+                    # Esperar tarea con timeout
+                    task = self.task_queue.get(timeout=1)
+                    logger.debug(f"Tarea recibida: {task}")
                     
-                # Pequeña pausa entre tareas
-                time.sleep(Config.WORKER_SLEEP_TIME)
-                
-            except Exception:
-                # Timeout esperando tarea, continuar
-                continue
-        
-        logger.info("Worker detenido")
+                    try:
+                        self._process(task)
+                    except Exception as e:
+                        logger.error(f"Error procesando tarea {task}: {e}", exc_info=True)
+                        
+                    # Pequeña pausa entre tareas
+                    time.sleep(Config.WORKER_SLEEP_TIME)
+                    
+                except Exception:
+                    # Timeout esperando tarea, continuar
+                    continue
+        except KeyboardInterrupt:
+            logger.info("Worker interrumpido por usuario")
+        finally:
+            logger.info("Worker detenido")
 
 
 if __name__ == '__main__':
