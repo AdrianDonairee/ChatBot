@@ -236,10 +236,12 @@ def socket_cli_mode(host: str, port: int):
 
 def main():
     parser = argparse.ArgumentParser(description='Run ChatBot in different modes')
-    parser.add_argument('--mode', choices=['cli', 'socket-cli', 'server', 'async-client'], default='cli',
-                        help='Modo: cli local, socket-cli (menú via socket), server (socket server), async-client (demo)')
-    parser.add_argument('--host', default='127.0.0.1')
-    parser.add_argument('--port', type=int, default=5001)
+    parser.add_argument('--mode', choices=['cli', 'socket-cli', 'server', 'async-client'], default='socket-cli',
+                        help='Modo: cli local, socket-cli (menú via socket - DEFAULT), server (socket server), async-client (demo)')
+    parser.add_argument('--host', default='127.0.0.1',
+                        help='Host del servidor socket (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=5001,
+                        help='Puerto del servidor socket (default: 5001)')
     args = parser.parse_args()
 
     if args.mode == 'cli':
