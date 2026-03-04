@@ -250,6 +250,9 @@ def main():
         socket_cli_mode(args.host, args.port)
     elif args.mode == 'server':
         # lanzar servidor de sockets
+        import sys
+        # Limpiar sys.argv para que el servidor use sus propios argumentos
+        sys.argv = [sys.argv[0], '--host', args.host, '--port', str(args.port)]
         from socket_srv.server import main as server_main
         server_main()
     elif args.mode == 'async-client':

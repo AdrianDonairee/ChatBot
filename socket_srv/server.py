@@ -66,16 +66,18 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
                     rest = cmd[len('BOOK'):].strip()
                     try:
                         slot_id_s, name, service = rest.split('|', 2)
-                        task = {
-                            'action': 'book',
-                            'slot_id': int(slot_id_s),
-                            'name': name,
-                            'service': service
-                        }
-                        task_queue.put(task)
-                        conn.sendall("Reserva encolada. El worker la procesará pronto.\n".encode('utf-8'))
-                        logger.info(f"{client_id} encoló reserva: slot={slot_id_s}, name={name}")
-                    except Exception as e:
+                        slot_id = int(slot_id_s)
+                        
+                        # Validar y reservar directamente (no encolar)
+                        ok = svc.book(slot_id, name.strip(), service.strip())
+                        
+                        if ok:
+                            conn.sendall(f"✓ Reserva exitosa: slot {slot_id} para {name.strip()}\n".encode('utf-8'))
+                            logger.info(f"{client_id} reservó exitosamente: slot={slot_id}, name={name}")
+                        else:
+                            conn.sendall(f"✗ No se pudo reservar. El turno {slot_id} ya está reservado o no existe.\n".encode('utf-8'))
+                            logger.warning(f"{client_id} intentó reservar slot ocupado: {slot_id}")
+                    except ValueError as e:
                         error_msg = f"Formato inválido BOOK. Use: BOOK id|name|service. Error: {e}\n"
                         conn.sendall(error_msg.encode('utf-8'))
                         logger.warning(f"{client_id} envió comando BOOK inválido: {e}")
@@ -116,7 +118,8 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int], task_queue: multip
             LIST 2026-03-01
 
 📝 BOOK id|nombre|servicio
-   Reserva un turno.
+   Reserva un turno en tiempo real.
+   Responde con ✓ si fue exitosa, ✗ si ya está reservado.
    Ejemplo: BOOK 1|Juan Pérez|Corte
 
 ❌ CANCEL_ID id
